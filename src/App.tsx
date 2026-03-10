@@ -741,8 +741,6 @@ function App() {
                   ) : null}
                   <PeakReviewChart
                     points={currentReview.points}
-                    multiplyBy={reviewSettings.multiplyBy}
-                    peakMode={reviewSettings.peakMode}
                     peakIndices={currentReview.peaks.map((peak) => peak.index)}
                     onPeakCommit={(peakIndices) => void handlePeakCommit(peakIndices)}
                   />

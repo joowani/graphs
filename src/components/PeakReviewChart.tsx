@@ -5,12 +5,9 @@ import type {
 } from "react";
 
 import type { ReviewPoint } from "../types";
-import type { PeakMode } from "../types";
 
 interface PeakReviewChartProps {
   points: ReviewPoint[];
-  multiplyBy: number;
-  peakMode: PeakMode;
   peakIndices: number[];
   onPeakCommit: (peakIndices: number[]) => void;
 }
@@ -123,76 +120,6 @@ function nearestPointIndex(points: ReviewPoint[], targetTime: number): number {
     : points[previous].index;
 }
 
-function localExtrema(values: number[], kind: "max" | "min"): number[] {
-  if (values.length === 0) {
-    return [];
-  }
-
-  const extrema: number[] = [];
-  let runStart = 0;
-
-  while (runStart < values.length) {
-    let runEnd = runStart;
-    while (runEnd + 1 < values.length && values[runEnd + 1] === values[runStart]) {
-      runEnd += 1;
-    }
-
-    const currentValue = values[runStart];
-    const previousValue = runStart > 0 ? values[runStart - 1] : null;
-    const nextValue = runEnd + 1 < values.length ? values[runEnd + 1] : null;
-    const plateauIndex = Math.floor((runStart + runEnd) / 2);
-
-    const isExtremum =
-      kind === "max"
-        ? (previousValue === null || currentValue > previousValue) && (nextValue === null || currentValue > nextValue)
-        : (previousValue === null || currentValue < previousValue) && (nextValue === null || currentValue < nextValue);
-
-    if (isExtremum) {
-      extrema.push(plateauIndex);
-    }
-
-    runStart = runEnd + 1;
-  }
-
-  if (extrema.length === values.length && values.every((value) => value === values[0])) {
-    return [Math.floor((values.length - 1) / 2)];
-  }
-
-  return extrema;
-}
-
-function localMaxima(values: number[]): number[] {
-  return localExtrema(values, "max");
-}
-
-function localMinima(values: number[]): number[] {
-  return localExtrema(values, "min");
-}
-
-function nearestAllowedIndex(points: ReviewPoint[], allowedIndices: number[], targetTime: number): number {
-  if (allowedIndices.length === 0) {
-    return nearestPointIndex(points, targetTime);
-  }
-
-  let low = 0;
-  let high = allowedIndices.length - 1;
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    const midTime = points[allowedIndices[mid]]?.time ?? Number.POSITIVE_INFINITY;
-    if (midTime < targetTime) {
-      low = mid + 1;
-    } else {
-      high = mid;
-    }
-  }
-
-  const candidate = allowedIndices[low];
-  const previous = allowedIndices[Math.max(0, low - 1)];
-  const candidateTime = points[candidate]?.time ?? Number.POSITIVE_INFINITY;
-  const previousTime = points[previous]?.time ?? Number.POSITIVE_INFINITY;
-  return Math.abs(candidateTime - targetTime) < Math.abs(previousTime - targetTime) ? candidate : previous;
-}
-
 function clampDomain(
   nextDomain: [number, number],
   minTime: number,
@@ -226,7 +153,7 @@ function clampDomain(
   return [start, end];
 }
 
-export function PeakReviewChart({ points, multiplyBy, peakMode, peakIndices, onPeakCommit }: PeakReviewChartProps) {
+export function PeakReviewChart({ points, peakIndices, onPeakCommit }: PeakReviewChartProps) {
   const [containerRef, size] = useElementSize<HTMLDivElement>();
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [draftPeaks, setDraftPeaks] = useState<number[]>(peakIndices);
@@ -238,7 +165,6 @@ export function PeakReviewChart({ points, multiplyBy, peakMode, peakIndices, onP
 
   const times = useMemo(() => points.map((point) => point.time), [points]);
   const values = useMemo(() => points.map((point) => point.value), [points]);
-  const transformedValues = useMemo(() => values.map((value) => value * multiplyBy), [multiplyBy, values]);
   const [minTime, maxTime] = useMemo(() => extent(times), [times]);
   const [xDomain, setXDomain] = useState<[number, number]>([minTime, maxTime]);
 
@@ -276,9 +202,6 @@ export function PeakReviewChart({ points, multiplyBy, peakMode, peakIndices, onP
     [visibleMinValue, visibleMaxValue, innerHeight],
   );
   const path = useMemo(() => buildLinePath(visibleSampledPoints, xScale, yScale), [visibleSampledPoints, xScale, yScale]);
-  const allowedPeakIndices = useMemo(() => {
-    return [...new Set([...localMaxima(transformedValues), ...localMinima(transformedValues)])].sort((left, right) => left - right);
-  }, [transformedValues]);
 
   const minSpan = useMemo(() => Math.max((maxTime - minTime) / 500, Number.EPSILON), [maxTime, minTime]);
   const interactionMode = activePeak !== null ? "dragging-peak" : panStart ? "panning" : "idle";
@@ -318,7 +241,7 @@ export function PeakReviewChart({ points, multiplyBy, peakMode, peakIndices, onP
     if (activePeak !== null) {
       const bounds = event.currentTarget.getBoundingClientRect();
       const x = event.clientX - bounds.left;
-      const nextIndex = nearestAllowedIndex(points, allowedPeakIndices, xScale.toDomain(x));
+      const nextIndex = nearestPointIndex(points, xScale.toDomain(x));
       pendingPeakRef.current = { peakOrder: activePeak, index: nextIndex };
       if (rafRef.current === null) {
         rafRef.current = window.requestAnimationFrame(() => {

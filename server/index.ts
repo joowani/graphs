@@ -71,6 +71,21 @@ function escapeSqlString(value: string): string {
   return value.replace(/'/g, "''");
 }
 
+function buildContentDisposition(filename: string): string {
+  const fallback = filename
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7E]+/g, "_")
+    .replace(/["\\]/g, "_")
+    .replace(/[;]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim() || "export.xlsx";
+  const encoded = encodeURIComponent(filename)
+    .replace(/['()]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/\*/g, "%2A");
+
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
 function detectTimeColumn(headers: string[]): string {
   const match = headers.find((header) => header.toLowerCase().includes("time"));
   return match ?? headers[0] ?? "Time";
@@ -489,7 +504,7 @@ app.get("/api/analyses/:analysisId/export", async (request, response) => {
     const filename = deriveExportFilename(workbook, analysis);
 
     response.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    response.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    response.setHeader("Content-Disposition", buildContentDisposition(filename));
     response.send(buffer);
   } catch (error) {
     response.status(500).json({ error: error instanceof Error ? error.message : "Failed to export workbook" });
