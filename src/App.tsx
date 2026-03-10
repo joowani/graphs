@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   createAnalysis,
-  exportAnalysisUrl,
   getReviewItem,
   recomputeReviewItem,
   saveCustomPeaks,
+  downloadAnalysisWorkbook,
   uploadWorkbook,
 } from "./api";
 import { PeakReviewChart } from "./components/PeakReviewChart";
@@ -134,6 +134,7 @@ function App() {
   const [currentItemId, setCurrentItemId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isGraphRefreshing, setIsGraphRefreshing] = useState(false);
   const [reviewSettings, setReviewSettings] = useState<{ multiplyBy: number; peakMode: PeakMode; peakCount: number }>({
     multiplyBy: 1,
@@ -345,6 +346,22 @@ function App() {
     }
   }
 
+  async function handleDownload() {
+    if (!analysis) {
+      return;
+    }
+
+    setIsDownloading(true);
+    setError(null);
+    try {
+      await downloadAnalysisWorkbook(analysis.analysisId);
+    } catch (caughtError) {
+      setError(caughtError instanceof Error ? caughtError.message : "Failed to download workbook");
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
   const currentIndex = useMemo(() => {
     if (!analysis || !currentItemId) {
       return -1;
@@ -373,9 +390,9 @@ function App() {
             </button>
           ) : null}
           {analysis && step === "review" ? (
-            <a className="download-link" href={exportAnalysisUrl(analysis.analysisId)}>
-              Download as Excel
-            </a>
+            <button className="download-link" disabled={isDownloading} onClick={() => void handleDownload()} type="button">
+              {isDownloading ? "Preparing Download..." : "Download as Excel"}
+            </button>
           ) : null}
         </div>
       </header>

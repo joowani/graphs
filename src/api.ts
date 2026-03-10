@@ -65,6 +65,46 @@ export async function saveCustomPeaks(
   return handleJson<ReviewItemPayload>(response);
 }
 
-export function exportAnalysisUrl(analysisId: string): string {
-  return `/api/analyses/${analysisId}/export`;
+function readDownloadFilename(response: Response, fallback: string): string {
+  const contentDisposition = response.headers.get("Content-Disposition");
+  if (!contentDisposition) {
+    return fallback;
+  }
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]);
+  }
+
+  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i);
+  if (quotedMatch?.[1]) {
+    return quotedMatch[1];
+  }
+
+  const bareMatch = contentDisposition.match(/filename=([^;]+)/i);
+  if (bareMatch?.[1]) {
+    return bareMatch[1].trim();
+  }
+
+  return fallback;
+}
+
+export async function downloadAnalysisWorkbook(analysisId: string): Promise<void> {
+  const response = await fetch(`/api/analyses/${analysisId}/export`);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(payload.error ?? response.statusText);
+  }
+
+  const blob = await response.blob();
+  const filename = readDownloadFilename(response, "peak-finder-export.xlsx");
+  const objectUrl = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename;
+  link.rel = "noopener";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(objectUrl), 0);
 }

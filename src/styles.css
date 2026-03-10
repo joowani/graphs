@@ -107,6 +107,13 @@ button {
   background: #112d35;
 }
 
+.download-link:disabled,
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .secondary-button {
   background: rgba(255, 255, 255, 0.8);
   color: #163a43;
